@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Wedding Fair Management - Elegant Pastel Theme */
+    --background: 230 25% 98%;
+    --foreground: 220 43% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 43% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 43% 11%;
+
+    /* Primary - Indigo Lavender */
+    --primary: 244 94% 69%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Rose Accent */
+    --secondary: 340 100% 74%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 230 25% 97%;
+    --muted-foreground: 218 13% 46%;
+
+    --accent: 244 94% 95%;
+    --accent-foreground: 244 94% 50%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 244 94% 69%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 218 13% 46%;
+    --sidebar-primary: 244 94% 69%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 244 94% 95%;
+    --sidebar-accent-foreground: 244 94% 50%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 244 94% 69%;
+
+    /* Custom tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(244 94% 69%) 0%, hsl(280 70% 65%) 100%);
+    --gradient-secondary: linear-gradient(135deg, hsl(340 100% 74%) 0%, hsl(320 80% 65%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(230 25% 98%) 100%);
+    --shadow-soft: 0 4px 20px -2px hsl(244 94% 69% / 0.15);
+    --shadow-card: 0 2px 12px -2px hsl(220 43% 11% / 0.08);
+    --shadow-elevated: 0 10px 40px -10px hsl(220 43% 11% / 0.15);
+  }
+
+  .dark {
+    --background: 220 43% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 43% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 43% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 244 94% 69%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 340 100% 74%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 220 43% 15%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 244 40% 20%;
+    --accent-foreground: 244 94% 80%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 30% 20%;
+    --input: 220 30% 20%;
+    --ring: 244 94% 69%;
+
+    --sidebar-background: 220 43% 8%;
+    --sidebar-foreground: 215 20% 65%;
+    --sidebar-primary: 244 94% 69%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 244 40% 20%;
+    --sidebar-accent-foreground: 244 94% 80%;
+    --sidebar-border: 220 30% 20%;
+    --sidebar-ring: 244 94% 69%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+
+  html {
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 shadow-sm;
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-secondary {
+    background: var(--gradient-secondary);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .pulse-warning {
+    animation: pulse-warning 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-warning {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+}
