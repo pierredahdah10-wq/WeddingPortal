@@ -34,7 +34,9 @@ export default function ExhibitorsPage() {
   const [assigningExhibitor, setAssigningExhibitor] = useState<DbExhibitor | null>(null);
   const [selectedAssignSectors, setSelectedAssignSectors] = useState<string[]>([]);
   const [selectedAssignFairs, setSelectedAssignFairs] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<'name' | 'company' | 'email'>('name');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingExhibitor, setDeletingExhibitor] = useState<DbExhibitor | null>(null);
+  const [sortBy, setSortBy] = useState<'name' | 'company' | 'email'>('company');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const isLoading = exhibitorsLoading || fairsLoading || sectorsLoading;
@@ -105,7 +107,7 @@ export default function ExhibitorsPage() {
 
   // Prevent body scroll when modal is open
   useEffect(() => {
-    if (showCreateModal || showEditModal || showAssignModal) {
+    if (showCreateModal || showEditModal || showAssignModal || showDeleteModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -113,7 +115,7 @@ export default function ExhibitorsPage() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showCreateModal, showEditModal, showAssignModal]);
+  }, [showCreateModal, showEditModal, showAssignModal, showDeleteModal]);
 
   const handleCreateExhibitor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -245,11 +247,17 @@ export default function ExhibitorsPage() {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground text-base mb-1 truncate">{exhibitor.name || '-'}</h3>
-                    {exhibitor.company && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                    {exhibitor.company ? (
+                      <div className="flex items-center gap-2 text-base font-semibold text-foreground mb-1">
                         <Building className="w-4 h-4 flex-shrink-0" />
                         <span className="truncate">{exhibitor.company}</span>
+                      </div>
+                    ) : (
+                      <h3 className="font-semibold text-foreground text-base mb-1 truncate">—</h3>
+                    )}
+                    {exhibitor.name && (
+                      <div className="text-sm text-muted-foreground mb-2">
+                        <span className="truncate">{exhibitor.name}</span>
                       </div>
                     )}
                     {(exhibitor.email || exhibitor.phone) && (
@@ -341,10 +349,9 @@ export default function ExhibitorsPage() {
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={async () => {
-                      if (confirm(`Are you sure you want to delete ${exhibitor.name}?`)) {
-                        await deleteExhibitor.mutateAsync(exhibitor.id);
-                      }
+                    onClick={() => {
+                      setDeletingExhibitor(exhibitor);
+                      setShowDeleteModal(true);
                     }} 
                     className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
@@ -519,10 +526,9 @@ export default function ExhibitorsPage() {
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            onClick={async () => {
-                              if (confirm(`Are you sure you want to delete ${exhibitor.name}?`)) {
-                                await deleteExhibitor.mutateAsync(exhibitor.id);
-                              }
+                            onClick={() => {
+                              setDeletingExhibitor(exhibitor);
+                              setShowDeleteModal(true);
                             }} 
                             className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" 
                             title="Delete Exhibitor"
@@ -711,9 +717,10 @@ export default function ExhibitorsPage() {
                   <Button 
                     variant="outline" 
                     className="w-full text-destructive hover:text-destructive"
-                    onClick={async () => {
-                      await deleteExhibitor.mutateAsync(drawerExhibitor.id);
+                    onClick={() => {
+                      setDeletingExhibitor(drawerExhibitor);
                       setShowDrawer(false);
+                      setShowDeleteModal(true);
                     }}
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -771,20 +778,20 @@ export default function ExhibitorsPage() {
 
               <form className="space-y-4" onSubmit={handleCreateExhibitor}>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Name</label>
-                  <input
-                    name="name"
-                    type="text"
-                    placeholder="Enter exhibitor name (optional)"
-                    className="w-full h-10 px-3 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-foreground mb-1.5">Company</label>
                   <input
                     name="company"
                     type="text"
                     placeholder="Enter company name"
+                    className="w-full h-10 px-3 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1.5">Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    placeholder="Enter exhibitor name (optional)"
                     className="w-full h-10 px-3 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
                   />
                 </div>
@@ -874,22 +881,22 @@ export default function ExhibitorsPage() {
 
               <form className="space-y-4" onSubmit={handleUpdateExhibitor}>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Name</label>
-                  <input
-                    name="name"
-                    type="text"
-                    placeholder="Enter exhibitor name (optional)"
-                    defaultValue={editingExhibitor.name || ''}
-                    className="w-full h-10 px-3 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-foreground mb-1.5">Company</label>
                   <input
                     name="company"
                     type="text"
                     placeholder="Enter company name"
                     defaultValue={editingExhibitor.company || ''}
+                    className="w-full h-10 px-3 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1.5">Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    placeholder="Enter exhibitor name (optional)"
+                    defaultValue={editingExhibitor.name || ''}
                     className="w-full h-10 px-3 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
                   />
                 </div>
@@ -1090,6 +1097,110 @@ export default function ExhibitorsPage() {
                 </Button>
               </div>
             </form>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deletingExhibitor && createPortal(
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              setShowDeleteModal(false);
+              setDeletingExhibitor(null);
+            }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh' }}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ 
+              opacity: 1, 
+              scale: 1, 
+              x: isMobile ? 0 : '-50%', 
+              y: '-50%'
+            }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "fixed bg-card border border-border rounded-xl shadow-elevated z-[10000] p-4 sm:p-6 max-w-md",
+              isMobile ? "left-4 right-4 w-auto" : "w-full left-1/2"
+            )}
+            style={isMobile ? {
+              position: 'fixed',
+              top: '50%',
+            } : {
+              position: 'fixed',
+              top: '50%',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-foreground">Delete Exhibitor</h2>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeletingExhibitor(null);
+                }}
+                className="p-2 rounded-lg hover:bg-accent transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-muted-foreground mb-2">
+                Are you sure you want to delete this exhibitor? This action cannot be undone.
+              </p>
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="font-medium text-foreground">
+                  {deletingExhibitor.company || deletingExhibitor.name || 'Exhibitor'}
+                </p>
+                {deletingExhibitor.company && deletingExhibitor.name && (
+                  <p className="text-sm text-muted-foreground mt-1">{deletingExhibitor.name}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeletingExhibitor(null);
+                }} 
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="button"
+                variant="destructive"
+                onClick={async () => {
+                  await deleteExhibitor.mutateAsync(deletingExhibitor.id);
+                  setShowDeleteModal(false);
+                  setDeletingExhibitor(null);
+                }}
+                disabled={deleteExhibitor.isPending}
+                className="flex-1"
+              >
+                {deleteExhibitor.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </>
+                )}
+              </Button>
+            </div>
           </motion.div>
         </AnimatePresence>,
         document.body
