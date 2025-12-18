@@ -493,74 +493,99 @@ export function useBulkAssignExhibitor() {
       sectorIds: string[];
       fairIds: string[];
     }) => {
-      // Get sector details and fair details for activity logging
-      const { data: sectorData } = await supabase
-        .from('sectors')
-        .select('id, name, fair_id')
-        .in('id', sectorIds);
+      // Get ALL current sector assignments for this exhibitor
+      const { data: currentSectors } = await supabase
+        .from('exhibitor_sectors')
+        .select('sector_id')
+        .eq('exhibitor_id', exhibitorId);
 
-      const { data: fairData } = await supabase
-        .from('fairs')
-        .select('id, name')
-        .in('id', fairIds);
+      // Get ALL current fair assignments for this exhibitor
+      const { data: currentFairs } = await supabase
+        .from('exhibitor_fairs')
+        .select('fair_id')
+        .eq('exhibitor_id', exhibitorId);
 
-      // Add sector relations (check for duplicates first)
-      if (sectorIds.length > 0) {
-        const { data: existingSectors } = await supabase
+      const currentSectorIds = currentSectors?.map(es => es.sector_id) || [];
+      const currentFairIds = currentFairs?.map(ef => ef.fair_id) || [];
+
+      // Find sectors to remove (in DB but not in selected list)
+      const sectorsToRemove = currentSectorIds.filter(id => !sectorIds.includes(id));
+      
+      // Find sectors to add (in selected list but not in DB)
+      const sectorsToAdd = sectorIds.filter(id => !currentSectorIds.includes(id));
+
+      // Find fairs to remove (in DB but not in selected list)
+      const fairsToRemove = currentFairIds.filter(id => !fairIds.includes(id));
+      
+      // Find fairs to add (in selected list but not in DB)
+      const fairsToAdd = fairIds.filter(id => !currentFairIds.includes(id));
+
+      // Remove sectors that were deselected
+      if (sectorsToRemove.length > 0) {
+        await supabase
           .from('exhibitor_sectors')
-          .select('sector_id')
+          .delete()
           .eq('exhibitor_id', exhibitorId)
-          .in('sector_id', sectorIds);
-
-        const existingSectorIds = existingSectors?.map(es => es.sector_id) || [];
-        const newSectorIds = sectorIds.filter(id => !existingSectorIds.includes(id));
-
-        if (newSectorIds.length > 0) {
-          const sectorRelations = newSectorIds.map(sectorId => ({
-            exhibitor_id: exhibitorId,
-            sector_id: sectorId,
-          }));
-          await supabase.from('exhibitor_sectors').insert(sectorRelations);
-        }
+          .in('sector_id', sectorsToRemove);
       }
 
-      // Add fair relations (check for duplicates first)
-      if (fairIds.length > 0) {
-        const { data: existingFairs } = await supabase
+      // Add new sector relations
+      if (sectorsToAdd.length > 0) {
+        const sectorRelations = sectorsToAdd.map(sectorId => ({
+          exhibitor_id: exhibitorId,
+          sector_id: sectorId,
+        }));
+        await supabase.from('exhibitor_sectors').insert(sectorRelations);
+      }
+
+      // Remove fairs that were deselected
+      if (fairsToRemove.length > 0) {
+        await supabase
           .from('exhibitor_fairs')
-          .select('fair_id')
+          .delete()
           .eq('exhibitor_id', exhibitorId)
-          .in('fair_id', fairIds);
-
-        const existingFairIds = existingFairs?.map(ef => ef.fair_id) || [];
-        const newFairIds = fairIds.filter(id => !existingFairIds.includes(id));
-
-        if (newFairIds.length > 0) {
-          const fairRelations = newFairIds.map(fairId => ({
-            exhibitor_id: exhibitorId,
-            fair_id: fairId,
-          }));
-          await supabase.from('exhibitor_fairs').insert(fairRelations);
-        }
+          .in('fair_id', fairsToRemove);
       }
 
-      // Log activities for each assignment
-      if (user && sectorData) {
-        const activities = sectorData.map(sector => {
-          const fair = fairData?.find(f => f.id === sector.fair_id);
-          return {
-            type: 'assign',
-            exhibitor_id: exhibitorId,
-            exhibitor_name: exhibitorName,
-            sector_id: sector.id,
-            sector_name: sector.name,
-            fair_id: sector.fair_id,
-            fair_name: fair?.name || '',
-            user_id: user.id,
-          };
-        });
-        if (activities.length > 0) {
-          await supabase.from('activities').insert(activities);
+      // Add new fair relations
+      if (fairsToAdd.length > 0) {
+        const fairRelations = fairsToAdd.map(fairId => ({
+          exhibitor_id: exhibitorId,
+          fair_id: fairId,
+        }));
+        await supabase.from('exhibitor_fairs').insert(fairRelations);
+      }
+
+      // Get sector details and fair details for activity logging (only for newly added ones)
+      if (user && sectorsToAdd.length > 0) {
+        const { data: sectorData } = await supabase
+          .from('sectors')
+          .select('id, name, fair_id')
+          .in('id', sectorsToAdd);
+
+        const { data: fairData } = await supabase
+          .from('fairs')
+          .select('id, name')
+          .in('id', fairsToAdd);
+
+        // Log activities for newly assigned sectors
+        if (sectorData) {
+          const activities = sectorData.map(sector => {
+            const fair = fairData?.find(f => f.id === sector.fair_id);
+            return {
+              type: 'assign',
+              exhibitor_id: exhibitorId,
+              exhibitor_name: exhibitorName,
+              sector_id: sector.id,
+              sector_name: sector.name,
+              fair_id: sector.fair_id,
+              fair_name: fair?.name || '',
+              user_id: user.id,
+            };
+          });
+          if (activities.length > 0) {
+            await supabase.from('activities').insert(activities);
+          }
         }
       }
     },
@@ -568,10 +593,10 @@ export function useBulkAssignExhibitor() {
       queryClient.invalidateQueries({ queryKey: ['exhibitor_sectors'] });
       queryClient.invalidateQueries({ queryKey: ['exhibitor_fairs'] });
       queryClient.invalidateQueries({ queryKey: ['activities'] });
-      toast.success('Exhibitor assigned successfully!');
+      toast.success('Exhibitor assignments updated successfully!');
     },
     onError: (error) => {
-      toast.error(`Error assigning exhibitor: ${error.message}`);
+      toast.error(`Error updating exhibitor assignments: ${error.message}`);
     },
   });
 }
