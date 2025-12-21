@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Plus, Edit, Eye, X, Mail, Phone, Building, Calendar, Grid3X3, Loader2, Trash2, Check, ChevronDown, UserPlus } from 'lucide-react';
+import { Search, Plus, Edit, Eye, X, Mail, Phone, Building, Calendar, Grid3X3, Loader2, Trash2, Check, ChevronDown, UserPlus, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useFairs, useSectors, useExhibitors, useExhibitorSectors, useExhibitorFairs, useCreateExhibitor, useUpdateExhibitor, useDeleteExhibitor, useBulkAssignExhibitor, DbExhibitor } from '@/hooks/useSupabaseData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -157,6 +158,74 @@ export default function ExhibitorsPage() {
     setEditingExhibitor(null);
   };
 
+  // Excel export helper
+  const downloadExcel = (rows: Record<string, any>[], filename: string) => {
+    if (!rows.length) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}-${new Date().toISOString().split('T')[0]}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Export exhibitors by trade show (fair) with their names and sectors
+  const exportExhibitorsByFair = () => {
+    const rows: Record<string, any>[] = [];
+
+    // Group exhibitors by fair
+    fairs.forEach(fair => {
+      const exhibitorFairIds = exhibitorFairs
+        .filter(ef => ef.fair_id === fair.id)
+        .map(ef => ef.exhibitor_id);
+
+      if (exhibitorFairIds.length === 0) {
+        return; // Skip fairs with no exhibitors
+      }
+
+      // For each exhibitor in this fair
+      exhibitorFairIds.forEach(exhibitorId => {
+        const exhibitor = exhibitors.find(e => e.id === exhibitorId);
+        if (!exhibitor) return;
+
+        // Get all sectors for this exhibitor
+        const exhibitorSectorIds = getExhibitorSectorIds(exhibitorId);
+        const sectorNames = exhibitorSectorIds
+          .map(sectorId => getSectorName(sectorId))
+          .filter(Boolean);
+
+        // Create one row per exhibitor with all sectors listed
+        rows.push({
+          'Trade Show': fair.name,
+          'City': fair.city,
+          'Exhibitor Name': exhibitor.name || '',
+          'Company': exhibitor.company || '',
+          'Sectors': sectorNames.length > 0 ? sectorNames.join(', ') : 'Not assigned',
+          'Email': exhibitor.email || '',
+          'Phone': exhibitor.phone || '',
+        });
+      });
+    });
+
+    if (rows.length === 0) {
+      toast.error('No exhibitors to export');
+      return;
+    }
+
+    downloadExcel(rows, 'exhibitors-by-trade-show');
+    toast.success('Exported exhibitors by trade show to Excel');
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -178,14 +247,26 @@ export default function ExhibitorsPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">Exhibitors Directory</h1>
           <p className="text-sm sm:text-base text-muted-foreground">Manage all exhibitors and photographers</p>
         </div>
-        <Button 
-          onClick={() => setShowCreateModal(true)} 
-          className="gradient-primary gap-2 w-full sm:w-auto"
-          size={isMobile ? "sm" : "default"}
-        >
-          <Plus className="w-4 h-4" />
-          Add Exhibitor
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button 
+            onClick={exportExhibitorsByFair} 
+            variant="outline"
+            className="gap-2 flex-1 sm:flex-initial"
+            size={isMobile ? "sm" : "default"}
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Export by Trade Show</span>
+            <span className="sm:hidden">Export</span>
+          </Button>
+          <Button 
+            onClick={() => setShowCreateModal(true)} 
+            className="gradient-primary gap-2 flex-1 sm:flex-initial"
+            size={isMobile ? "sm" : "default"}
+          >
+            <Plus className="w-4 h-4" />
+            Add Exhibitor
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
