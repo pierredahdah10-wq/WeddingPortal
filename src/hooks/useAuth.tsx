@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isApproved, setIsApproved] = useState(false);
 
-  const fetchUserData = async (userId: string, retryCount = 0) => {
+  const fetchUserData = async (userId: string, retryCount = 0, isInitialLoad = false) => {
     try {
       // Fetch profile first (with retry for new signups where trigger might not have run yet)
       const { data: profileData, error: profileError } = await supabase
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!profileData && retryCount < 3) {
         console.log('Profile not found, retrying...', retryCount);
         setTimeout(() => {
-          fetchUserData(userId, retryCount + 1);
+          fetchUserData(userId, retryCount + 1, isInitialLoad);
         }, 500);
         return;
       }
@@ -59,6 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
         setProfile(null);
         setIsApproved(false);
+        if (isInitialLoad) {
+          setIsLoading(false);
+        }
         toast.error('Your account profile was not found. Please contact support.');
         return;
       }
@@ -70,6 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
         setProfile(null);
         setIsApproved(false);
+        if (isInitialLoad) {
+          setIsLoading(false);
+        }
         if (profileData.approval_status === 'pending') {
           toast.error('Your account is pending admin approval. Please wait for approval.');
         } else if (profileData.approval_status === 'rejected') {
@@ -101,11 +107,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setIsApproved(true);
 
-      // Update last login
-      await supabase
-        .from('profiles')
-        .update({ last_login: new Date().toISOString() })
-        .eq('user_id', userId);
+      // Update last login (only if not initial load to avoid unnecessary updates)
+      if (!isInitialLoad) {
+        await supabase
+          .from('profiles')
+          .update({ last_login: new Date().toISOString() })
+          .eq('user_id', userId);
+      }
+
+      // Set loading to false only after everything is verified
+      if (isInitialLoad) {
+        setIsLoading(false);
+      }
     } catch (error) {
       console.error('Error fetching user data:', error);
       // If there's an error fetching profile, it might mean user was deleted
@@ -116,6 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
         setProfile(null);
         setIsApproved(false);
+      }
+      if (isInitialLoad) {
+        setIsLoading(false);
       }
     }
   };
@@ -130,13 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Defer Supabase calls with setTimeout
         if (session?.user) {
           setIsApproved(false); // Reset approval status while checking
+          // Don't set isLoading to false here - let fetchUserData handle it for initial loads
           setTimeout(() => {
-            fetchUserData(session.user.id);
+            fetchUserData(session.user.id, 0, false);
           }, 0);
         } else {
           setRole(null);
           setProfile(null);
           setIsApproved(false);
+          // Only set loading to false if we're not in initial load
+          // Initial load is handled by getSession below
         }
         
         if (event === 'SIGNED_OUT') {
@@ -147,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // If token is refreshed, check if user still exists
         if (event === 'TOKEN_REFRESHED' && session?.user) {
-          fetchUserData(session.user.id);
+          fetchUserData(session.user.id, 0, false);
         }
       }
     );
@@ -158,11 +177,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         setIsApproved(false); // Reset while checking
-        fetchUserData(session.user.id);
+        // Keep isLoading true until fetchUserData completes
+        fetchUserData(session.user.id, 0, true);
       } else {
         setIsApproved(false);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     // Set up a periodic check to verify user still exists and is approved (every 30 seconds)
