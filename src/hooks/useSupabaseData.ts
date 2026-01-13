@@ -41,6 +41,7 @@ export interface DbProfile {
   email: string;
   avatar: string | null;
   is_active: boolean;
+  approval_status: 'pending' | 'approved' | 'rejected';
   last_login: string | null;
   created_at: string;
   updated_at: string;
@@ -710,6 +711,56 @@ export function useDeleteProfile() {
     },
     onError: (error) => {
       toast.error(`Error deleting user: ${error.message}`);
+    },
+  });
+}
+
+export function useApproveUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ approval_status: 'approved' })
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast.success('User approved successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Error approving user: ${error.message}`);
+    },
+  });
+}
+
+export function useRejectUser() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ approval_status: 'rejected' })
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+      
+      // Sign out the user if they're currently logged in
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id === userId) {
+        await supabase.auth.signOut();
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast.success('User rejected successfully!');
+    },
+    onError: (error) => {
+      toast.error(`Error rejecting user: ${error.message}`);
     },
   });
 }

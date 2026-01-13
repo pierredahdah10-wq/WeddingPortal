@@ -217,6 +217,7 @@ export type Database = {
           email: string
           id: string
           is_active: boolean
+          approval_status: Database["public"]["Enums"]["approval_status"]
           last_login: string | null
           name: string
           updated_at: string
@@ -228,6 +229,7 @@ export type Database = {
           email: string
           id?: string
           is_active?: boolean
+          approval_status?: Database["public"]["Enums"]["approval_status"]
           last_login?: string | null
           name: string
           updated_at?: string
@@ -239,6 +241,7 @@ export type Database = {
           email?: string
           id?: string
           is_active?: boolean
+          approval_status?: Database["public"]["Enums"]["approval_status"]
           last_login?: string | null
           name?: string
           updated_at?: string
@@ -321,6 +324,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "sales"
+      approval_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -449,6 +453,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "sales"],
+      approval_status: ["pending", "approved", "rejected"],
     },
   },
 } as const

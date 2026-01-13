@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit, Trash2, X, Shield, User as UserIcon, Clock, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Shield, User as UserIcon, Clock, Loader2, AlertTriangle, CheckCircle, XCircle, UserCheck } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useProfiles, useUserRoles, useUpdateProfile, useUpdateUserRole, useDeleteProfile } from '@/hooks/useSupabaseData';
+import { useProfiles, useUserRoles, useUpdateProfile, useUpdateUserRole, useDeleteProfile, useApproveUser, useRejectUser } from '@/hooks/useSupabaseData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -23,6 +23,8 @@ export default function UsersPage() {
   const updateProfile = useUpdateProfile();
   const updateUserRole = useUpdateUserRole();
   const deleteProfile = useDeleteProfile();
+  const approveUser = useApproveUser();
+  const rejectUser = useRejectUser();
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<{ id: string; name: string; email: string } | null>(null);
@@ -55,6 +57,27 @@ export default function UsersPage() {
       role: roleData?.role || 'sales',
     };
   });
+
+  // Separate users by approval status
+  const pendingUsers = usersWithRoles.filter(user => user.approval_status === 'pending');
+  const approvedUsers = usersWithRoles.filter(user => user.approval_status === 'approved');
+  const rejectedUsers = usersWithRoles.filter(user => user.approval_status === 'rejected');
+
+  const handleApprove = async (userId: string) => {
+    try {
+      await approveUser.mutateAsync(userId);
+    } catch (error) {
+      // Error is handled by the mutation's onError
+    }
+  };
+
+  const handleReject = async (userId: string) => {
+    try {
+      await rejectUser.mutateAsync(userId);
+    } catch (error) {
+      // Error is handled by the mutation's onError
+    }
+  };
 
   const handleToggleActive = async (userId: string, isActive: boolean) => {
     await updateProfile.mutateAsync({ userId, updates: { is_active: isActive } });
@@ -144,11 +167,90 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* Desktop Table / Mobile Cards */}
+      {/* Pending User Requests Section */}
+      {pendingUsers.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card border border-border rounded-xl p-4 sm:p-6 shadow-card"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-warning/10">
+              <UserCheck className="w-5 h-5 text-warning" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Pending User Requests</h2>
+              <p className="text-sm text-muted-foreground">
+                {pendingUsers.length} {pendingUsers.length === 1 ? 'user' : 'users'} waiting for approval
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {pendingUsers.map((user) => (
+              <motion.div
+                key={user.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-muted/50 rounded-lg border border-border"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-warning/10 text-warning flex items-center justify-center text-sm font-medium flex-shrink-0">
+                    {user.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate">{user.name}</p>
+                    <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                    {user.created_at && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Requested {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleApprove(user.user_id)}
+                    disabled={approveUser.isPending || rejectUser.isPending}
+                    className="gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleReject(user.user_id)}
+                    disabled={approveUser.isPending || rejectUser.isPending}
+                    className="gap-2"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Reject
+                  </Button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Approved Users Section */}
+      {approvedUsers.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mt-6 mb-4">
+            <h2 className="text-lg font-semibold text-foreground">Approved Users</h2>
+            <Badge variant="secondary" className="text-xs">
+              {approvedUsers.length}
+            </Badge>
+          </div>
+
+          {/* Desktop Table / Mobile Cards */}
       {isMobile ? (
         /* Mobile Card View */
         <div className="space-y-3">
-          {usersWithRoles.map((user, index) => (
+          {approvedUsers.map((user, index) => (
             <motion.div
               key={user.id}
               initial={{ opacity: 0, y: 10 }}
@@ -258,7 +360,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {usersWithRoles.map((user, index) => (
+                {approvedUsers.map((user, index) => (
                   <motion.tr
                     key={user.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -343,12 +445,57 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+        </>
+      )}
 
-      {usersWithRoles.length === 0 && (
+      {approvedUsers.length === 0 && pendingUsers.length === 0 && (
         <div className="bg-card border border-border rounded-xl py-12 text-center shadow-card">
           <UserIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <p className="text-muted-foreground">No users found. Users will appear here when they sign up.</p>
         </div>
+      )}
+
+      {/* Rejected Users Section (Optional - can be collapsed) */}
+      {rejectedUsers.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card border border-border rounded-xl p-4 sm:p-6 shadow-card"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-destructive/10">
+              <XCircle className="w-5 h-5 text-destructive" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Rejected Users</h2>
+              <p className="text-sm text-muted-foreground">
+                {rejectedUsers.length} {rejectedUsers.length === 1 ? 'user' : 'users'} have been rejected
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {rejectedUsers.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-destructive/10 text-destructive flex items-center justify-center text-xs font-medium flex-shrink-0">
+                    {user.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground text-sm truncate">{user.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                </div>
+                <Badge variant="destructive" className="text-xs">
+                  Rejected
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       )}
 
       {/* Role Definitions */}

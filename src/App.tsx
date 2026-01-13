@@ -17,7 +17,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isApproved } = useAuth();
   
   if (isLoading) {
     return (
@@ -27,7 +27,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
   
-  if (!user) {
+  // User must exist AND be approved to access the app
+  if (!user || !isApproved) {
     return <Navigate to="/" replace />;
   }
   
@@ -35,7 +36,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AuthenticatedRedirect() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isApproved } = useAuth();
   
   if (isLoading) {
     return (
@@ -45,7 +46,8 @@ function AuthenticatedRedirect() {
     );
   }
   
-  if (user) {
+  // Only redirect to dashboard if user exists AND is approved
+  if (user && isApproved) {
     return <Navigate to="/dashboard" replace />;
   }
   

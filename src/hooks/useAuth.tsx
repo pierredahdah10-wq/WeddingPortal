@@ -17,6 +17,7 @@ interface AuthContextType {
     is_active: boolean;
   } | null;
   isLoading: boolean;
+  isApproved: boolean;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -31,10 +32,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [profile, setProfile] = useState<AuthContextType['profile']>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isApproved, setIsApproved] = useState(false);
 
-  const fetchUserData = async (userId: string) => {
+  const fetchUserData = async (userId: string, retryCount = 0) => {
     try {
-      // Fetch role
+      // Fetch profile first (with retry for new signups where trigger might not have run yet)
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      // If profile doesn't exist, wait a bit and retry (for new signups)
+      if (!profileData && retryCount < 3) {
+        console.log('Profile not found, retrying...', retryCount);
+        setTimeout(() => {
+          fetchUserData(userId, retryCount + 1);
+        }, 500);
+        return;
+      }
+
+      // If profile still doesn't exist after retries, user might have been deleted
+      if (!profileData) {
+        console.warn('User profile not found after retries, signing out...');
+        await supabase.auth.signOut();
+        setRole(null);
+        setProfile(null);
+        setIsApproved(false);
+        toast.error('Your account profile was not found. Please contact support.');
+        return;
+      }
+
+      // Check if user is approved - if not, sign them out immediately
+      if (profileData.approval_status !== 'approved') {
+        console.warn('User not approved, signing out...');
+        await supabase.auth.signOut();
+        setRole(null);
+        setProfile(null);
+        setIsApproved(false);
+        if (profileData.approval_status === 'pending') {
+          toast.error('Your account is pending admin approval. Please wait for approval.');
+        } else if (profileData.approval_status === 'rejected') {
+          toast.error('Your account has been rejected. You cannot access the system.');
+        }
+        return;
+      }
+
+      // User is approved, fetch role and set profile
       const { data: roleData } = await supabase
         .from('user_roles')
         .select('role')
@@ -47,23 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
       }
 
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
-      // If profile doesn't exist, user has been deleted - sign them out
-      if (!profileData) {
-        console.warn('User profile not found, signing out...');
-        await supabase.auth.signOut();
-        setRole(null);
-        setProfile(null);
-        toast.error('Your account has been deleted. You have been signed out.');
-        return;
-      }
-
       setProfile({
         id: profileData.id,
         name: profileData.name,
@@ -71,6 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatar: profileData.avatar,
         is_active: profileData.is_active,
       });
+
+      setIsApproved(true);
 
       // Update last login
       await supabase
@@ -86,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         setRole(null);
         setProfile(null);
+        setIsApproved(false);
       }
     }
   };
@@ -99,17 +129,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Defer Supabase calls with setTimeout
         if (session?.user) {
+          setIsApproved(false); // Reset approval status while checking
           setTimeout(() => {
             fetchUserData(session.user.id);
           }, 0);
         } else {
           setRole(null);
           setProfile(null);
+          setIsApproved(false);
         }
         
         if (event === 'SIGNED_OUT') {
           setRole(null);
           setProfile(null);
+          setIsApproved(false);
         }
 
         // If token is refreshed, check if user still exists
@@ -124,19 +157,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setIsApproved(false); // Reset while checking
         fetchUserData(session.user.id);
+      } else {
+        setIsApproved(false);
       }
       setIsLoading(false);
     });
 
-    // Set up a periodic check to verify user still exists (every 30 seconds)
+    // Set up a periodic check to verify user still exists and is approved (every 30 seconds)
     const profileCheckInterval = setInterval(async () => {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (currentSession?.user) {
-        // Check if profile still exists
+        // Check if profile still exists and is approved
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, approval_status')
           .eq('user_id', currentSession.user.id)
           .maybeSingle();
         
@@ -146,7 +182,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
           setRole(null);
           setProfile(null);
-          toast.error('Your account has been deleted. You have been signed out.');
+          setIsApproved(false);
+          toast.error('Your account profile was not found. Please contact support.');
+        } else if (profileData.approval_status !== 'approved') {
+          // User is no longer approved - sign out
+          console.warn('User approval status changed, signing out...');
+          await supabase.auth.signOut();
+          setRole(null);
+          setProfile(null);
+          setIsApproved(false);
+          if (profileData.approval_status === 'pending') {
+            toast.error('Your account is pending admin approval.');
+          } else if (profileData.approval_status === 'rejected') {
+            toast.error('Your account has been rejected.');
+          }
         }
       }
     }, 30000); // Check every 30 seconds
@@ -159,9 +208,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
+      // Check if this email was previously rejected
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('approval_status')
+        .eq('email', email.toLowerCase())
+        .maybeSingle();
+
+      if (existingProfile?.approval_status === 'rejected') {
+        toast.error('This email has been rejected. You cannot sign up with this email address.');
+        return { error: new Error('Email rejected') };
+      }
+
       const redirectUrl = `${window.location.origin}/`;
       
-      const { error } = await supabase.auth.signUp({
+      const { error, data } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -181,7 +242,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
-      toast.success('Account created successfully. Please check your email for verification.');
+      // If signup was successful, immediately sign out the user
+      // since they need admin approval first
+      if (data.user) {
+        // Wait a moment for the trigger to create the profile
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Sign out immediately - user needs approval before accessing
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setRole(null);
+        setProfile(null);
+        setIsApproved(false);
+      }
+
+      toast.success('Account created successfully. Your request is pending admin approval. You will be notified once approved.');
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -190,7 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error, data } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -202,6 +278,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           toast.error(error.message);
         }
         return { error };
+      }
+
+      // Check approval status after successful authentication
+      if (data.user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('approval_status')
+          .eq('user_id', data.user.id)
+          .maybeSingle();
+
+        if (profileData) {
+          if (profileData.approval_status === 'pending') {
+            await supabase.auth.signOut();
+            toast.error('Your account is pending admin approval. Please wait for approval before logging in.');
+            return { error: new Error('Account pending approval') };
+          }
+          
+          if (profileData.approval_status === 'rejected') {
+            await supabase.auth.signOut();
+            toast.error('Your account has been rejected. You cannot access the system.');
+            return { error: new Error('Account rejected') };
+          }
+        }
       }
 
       toast.success('Welcome back!');
@@ -225,6 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setRole(null);
       setProfile(null);
+      setIsApproved(false);
     } catch (error) {
       console.error('Error in signOut:', error);
       // Ensure state is cleared even on error
@@ -232,6 +332,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setRole(null);
       setProfile(null);
+      setIsApproved(false);
     }
   };
 
@@ -243,6 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         profile,
         isLoading,
+        isApproved,
         signUp,
         signIn,
         signOut,
