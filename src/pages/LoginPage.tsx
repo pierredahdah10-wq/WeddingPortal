@@ -211,7 +211,7 @@ export default function LoginPage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}
         >
-          © 2025 Wedding Fair Manager.
+          © 2026 Wedding Fair Manager.
         </motion.p>
       </motion.div>
     </div>
