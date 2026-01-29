@@ -183,8 +183,18 @@ export default function ExhibitorsPage() {
   const exportExhibitorsByFair = () => {
     const rows: Record<string, any>[] = [];
 
+    // Determine which fairs to export based on selected filters
+    const fairsToExport = selectedFairs.length > 0 
+      ? fairs.filter(fair => selectedFairs.includes(fair.id))
+      : fairs; // If no filter selected, export all fairs
+
+    if (fairsToExport.length === 0) {
+      toast.error('Please select at least one fair to export');
+      return;
+    }
+
     // Group exhibitors by fair
-    fairs.forEach(fair => {
+    fairsToExport.forEach(fair => {
       const exhibitorFairIds = exhibitorFairs
         .filter(ef => ef.fair_id === fair.id)
         .map(ef => ef.exhibitor_id);
@@ -198,9 +208,13 @@ export default function ExhibitorsPage() {
         const exhibitor = exhibitors.find(e => e.id === exhibitorId);
         if (!exhibitor) return;
 
-        // Get all sectors for this exhibitor
+        // Get all sectors for this exhibitor (only sectors from the current fair)
         const exhibitorSectorIds = getExhibitorSectorIds(exhibitorId);
-        const sectorNames = exhibitorSectorIds
+        // Filter sectors to only include those from the current fair
+        const fairSectors = sectors.filter(s => s.fair_id === fair.id);
+        const fairSectorIds = fairSectors.map(s => s.id);
+        const relevantSectorIds = exhibitorSectorIds.filter(sectorId => fairSectorIds.includes(sectorId));
+        const sectorNames = relevantSectorIds
           .map(sectorId => getSectorName(sectorId))
           .filter(Boolean);
 
@@ -218,12 +232,19 @@ export default function ExhibitorsPage() {
     });
 
     if (rows.length === 0) {
-      toast.error('No exhibitors to export');
+      toast.error('No exhibitors to export for the selected fair(s)');
       return;
     }
 
-    downloadExcel(rows, 'exhibitors-by-trade-show');
-    toast.success('Exported exhibitors by trade show to Excel');
+    // Create filename based on selected fairs
+    const fairNames = fairsToExport.map(f => f.city).join('-');
+    const filename = selectedFairs.length === 1 
+      ? `exhibitors-${fairNames.toLowerCase().replace(/\s+/g, '-')}`
+      : 'exhibitors-by-trade-show';
+
+    downloadExcel(rows, filename);
+    const fairCount = fairsToExport.length;
+    toast.success(`Exported ${rows.length} exhibitor${rows.length !== 1 ? 's' : ''} from ${fairCount} fair${fairCount !== 1 ? 's' : ''}`);
   };
 
   if (isLoading) {

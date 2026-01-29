@@ -101,13 +101,16 @@ export default function DashboardPage() {
   const recentActivities = activities.slice(0, 10);
 
   // Combine profiles with roles for team overview
-  const usersWithRoles = profiles.map(profile => {
-    const roleData = userRoles.find(r => r.user_id === profile.user_id);
-    return {
-      ...profile,
-      role: roleData?.role || 'sales',
-    };
-  });
+  // Only show approved users in the team overview
+  const usersWithRoles = profiles
+    .filter(profile => profile.approval_status === 'approved')
+    .map(profile => {
+      const roleData = userRoles.find(r => r.user_id === profile.user_id);
+      return {
+        ...profile,
+        role: roleData?.role || 'sales',
+      };
+    });
 
   if (isLoading) {
     return (
